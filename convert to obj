@@ -1,0 +1,90 @@
+import React, { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter';
+
+export default function AvatarBuilder() {
+  const iframeRef = useRef(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [objBlob, setObjBlob] = useState(null);
+
+  useEffect(() => {
+    const receiveMessage = (event) => {
+      if (event.origin !== 'https://demo.readyplayer.me') return;
+      const data = event.data;
+      if (data?.source === 'readyplayerme' && data?.eventName === 'v1.avatar.exported') {
+        setAvatarUrl(data.data.url);
+        loadGLBAndConvertToOBJ(data.data.url);
+      }
+    };
+
+    window.addEventListener('message', receiveMessage);
+    return () => window.removeEventListener('message', receiveMessage);
+  }, []);
+
+  const openAvatarCreator = () => {
+    iframeRef.current.style.display = 'block';
+    iframeRef.current.src = 'https://demo.readyplayer.me/avatar?frameApi';
+  };
+
+  const loadGLBAndConvertToOBJ = async (glbUrl) => {
+    const loader = new GLTFLoader();
+    loader.load(glbUrl, (gltf) => {
+      const scene = gltf.scene;
+      const exporter = new OBJExporter();
+      const objText = exporter.parse(scene);
+      const blob = new Blob([objText], { type: 'text/plain' });
+      setObjBlob(blob);
+    }, undefined, (error) => {
+      console.error('GLB to OBJ conversion error:', error);
+    });
+  };
+
+  const downloadOBJ = () => {
+    if (!objBlob) return;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(objBlob);
+    link.download = 'avatar.obj';
+    link.click();
+  };
+
+  return (
+    <div className="min-h-screen text-center p-6" style={{ backgroundColor: '#e0f7ff' }}>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', color: '#0284c7' }}>MAD 3D Avatar Builder</h1>
+
+      {!avatarUrl && (
+        <>
+          <p style={{ marginBottom: '1rem', fontSize: '1.2rem' }}>Click below to start customizing your 3D avatar.</p>
+          <button onClick={openAvatarCreator} style={{ backgroundColor: '#0284c7', color: 'white', padding: '0.75rem 2rem', borderRadius: '8px', fontSize: '1rem' }}>
+            Launch Avatar Creator
+          </button>
+        </>
+      )}
+
+      {avatarUrl && (
+        <>
+          <h2 style={{ fontSize: '1.5rem', marginTop: '2rem', color: '#0369a1' }}>Your Avatar</h2>
+          <model-viewer
+            src={avatarUrl}
+            alt="Your Avatar"
+            auto-rotate
+            camera-controls
+            style={{ width: '100%', height: '600px', marginTop: '1rem' }}
+            exposure="0.9"
+            environment-image="neutral"
+          ></model-viewer>
+          <button onClick={downloadOBJ} style={{ backgroundColor: '#10b981', color: 'white', padding: '0.75rem 2rem', borderRadius: '8px', fontSize: '1rem', marginTop: '1.5rem' }}>
+            Download OBJ
+          </button>
+        </>
+      )}
+
+      <iframe
+        ref={iframeRef}
+        title="Ready Player Me"
+        style={{ display: 'none', width: '100%', height: '700px', border: 'none', marginTop: '20px' }}
+        allow="camera *; microphone *"
+      ></iframe>
+    </div>
+  );
+}
